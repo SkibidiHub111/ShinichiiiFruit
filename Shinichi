@@ -1,13 +1,17 @@
--- Blox Fruits Auto Fruit Finder Script with ESP & Server Hop
+-- Blox Fruits Auto Fruit Finder, ESP, Server Hop & Avatar Changer
 
--- UI đơn giản để đổi Avatar bằng Asset ID
+-- Thay đổi Avatar bằng Asset ID
 local AssetID = "74026087738956" -- Nhập Asset ID của bạn tại đây
-game.Players.LocalPlayer.Character.Humanoid:ApplyDescriptionReset()
-game.Players.LocalPlayer.CharacterAppearanceId = AssetID
+pcall(function()
+    game.Players.LocalPlayer.CharacterAppearanceId = AssetID
+    game.Players.LocalPlayer:LoadCharacter()
+end)
 
--- ESP Fruit (Hiển thị vị trí trái ác quỷ)
-function CreateESP(object, color)
+-- Hàm tạo ESP cho trái ác quỷ
+function CreateESP(object)
+    if object:FindFirstChild("ESP") then return end
     local esp = Instance.new("BillboardGui", object)
+    esp.Name = "ESP"
     esp.Size = UDim2.new(0, 100, 0, 40)
     esp.Adornee = object
     esp.AlwaysOnTop = true
@@ -15,16 +19,16 @@ function CreateESP(object, color)
     local text = Instance.new("TextLabel", esp)
     text.Size = UDim2.new(1, 0, 1, 0)
     text.Text = "Devil Fruit"
-    text.TextColor3 = color
+    text.TextColor3 = Color3.new(1, 0, 0)
     text.BackgroundTransparency = 1
     text.TextStrokeTransparency = 0.5
 end
 
 -- Tìm kiếm trái ác quỷ
 function FindFruits()
-    for _, obj in pairs(game.Workspace:GetDescendants()) do
-        if obj:IsA("Tool") and string.find(obj.Name, "Fruit") then
-            CreateESP(obj.Handle, Color3.new(1, 0, 0))
+    for _, obj in pairs(game:GetService("Workspace"):GetDescendants()) do
+        if obj:IsA("Tool") and string.match(obj.Name, "Fruit") and obj:FindFirstChild("Handle") then
+            CreateESP(obj.Handle)
             MoveToFruit(obj.Handle.Position)
             return true
         end
@@ -35,32 +39,39 @@ end
 -- Tự động di chuyển đến vị trí trái ác quỷ
 function MoveToFruit(position)
     local player = game.Players.LocalPlayer
-    player.Character.HumanoidRootPart.CFrame = CFrame.new(position)
+    local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        hrp.CFrame = CFrame.new(position + Vector3.new(0, 5, 0)) -- Di chuyển lên cao để tránh va chạm
+    end
 end
 
--- Server Hop (Đổi server nếu không có hoặc đã nhặt trái)
+-- Đổi server khi cần
 function ServerHop()
     local HttpService = game:GetService("HttpService")
-    local TPS = game:GetService("TeleportService")
+    local TeleportService = game:GetService("TeleportService")
     local PlaceID = game.PlaceId
 
-    local Servers = HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Asc&limit=100"))
+    local success, servers = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. PlaceID .. "/servers/Public?sortOrder=Asc&limit=100"))
+    end)
 
-    for _, server in ipairs(Servers.data) do
-        if server.playing < server.maxPlayers then
-            TPS:TeleportToPlaceInstance(PlaceID, server.id)
-            break
+    if success and servers and servers.data then
+        for _, server in ipairs(servers.data) do
+            if server.playing < server.maxPlayers then
+                TeleportService:TeleportToPlaceInstance(PlaceID, server.id)
+                break
+            end
         end
     end
 end
 
 -- Vòng lặp chính
-while true do
-    if not FindFruits() then
+while wait(10) do
+    local found = FindFruits()
+    if not found then
         ServerHop() -- Đổi server nếu không tìm thấy trái
     else
-        wait(5) -- Chờ 5 giây để nhặt trái, sau đó đổi server
-        ServerHop()
+        wait(15) -- Chờ 15 giây để nhặt trái
+        ServerHop() -- Đổi server sau khi nhặt
     end
-    wait(10) -- Kiểm tra mỗi 10 giây
 end
